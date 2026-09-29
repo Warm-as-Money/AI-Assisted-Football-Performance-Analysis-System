@@ -1,6 +1,8 @@
 from ultralytics import YOLO # Offical library that contains YOLO11 model
 import cv2 # Computer vision tool to load video files, draw boxes, save/display output frames
-import math
+import numpy as np
+import matplotlib as plt
+from scipy.interpolate import interp1d
 from collections import defaultdict
 
 VIDEO_PATH = "media/clear view sidelines.mp4"
@@ -19,33 +21,34 @@ def running_model():
         verbose=False # Silences messy Pytorch terminal noise
     )
 
-    # {track_id: [(x,y), (x, y), ...]}
+    # {track_id: [(frame1,x,y), (frame2,x, y), ...]}
     ball_history = defaultdict(list)
     player_history = defaultdict(list) 
     frame_count = 0
 
+    # Pass 1
     for result in results:
+        frame_count += 1
         boxes = result.boxes.xywh.cpu().numpy() # Extract coords as centre-x, centre-y, width, heigth
         track_ids = result.boxes.id.int().cpu().tolist() # These are the persistent IDs
         class_ids = result.boxes.cls.int().cpu().tolist()
 
         current_players = []
         current_ball = []
-        frame_count += 1
 
         # Next, I need to record and process coords line-by-line
         for box, track_id, class_id in zip(boxes, track_ids, class_ids):
             x, y, w, h = box
 
             # Recording the centre coord of the object
-            centre_coord = (float(x), float(y))
+            frame_centre_coord = (frame_count, float(x), float(y))
 
             if class_id == 32:
-                ball_history[track_id].append(centre_coord)
-                current_ball.append(f"Ball ID {track_id} at {centre_coord}")
+                ball_history[track_id].append(frame_centre_coord)
+                current_ball.append(f"Ball ID {track_id} at {frame_centre_coord}")
             else:
-                player_history[track_id].append(centre_coord)
-                current_players.append(f"ID {track_id} ({centre_coord})")
+                player_history[track_id].append(frame_centre_coord)
+                current_players.append(f"ID {track_id} ({frame_centre_coord})")
 
         print(f"---------------FRAME {frame_count}---------------")
         if current_ball:
@@ -54,8 +57,14 @@ def running_model():
             print(f"Ball Detected: None")
         print(f"Players on screen ({len(current_players)}):")
         # Grouping player coords in rows of 4
-        for i in range(0, len(current_players), 4):
-            print("   " + ", ".join(current_players[i:i+4]))
+        row = []
+        for player in current_players:
+            row.append(player)
+            if len(row) == 4:
+                print("   " + ", ".join(row))
+                row = []
+        if row:
+            print("  "+", ".join(row))
         print(f"-------------------------------------------------")
 
     print("\n" + "="*40)
@@ -64,6 +73,30 @@ def running_model():
     print(f"Total unique players logged: {len(player_history)}")
     print(f"Total unique balls logged: {len(ball_history)}")
     print("="*40)
+
+    # Pass 2
+    # Linear interpolation of the ball data
+    interpolated_ball_history = {}
+    for track_id, trajectory in ball_history.items():
+        frames = np.array([pt[0] for pt in trajectory])
+        xs = np.array([pt[1] for pt in trajectory])
+        ys = np.array([pt[2] for pt in trajectory])
+
+        f_x = interp1d(frames, xs, kind="linear", fill_value="extrapolate")
+        f_y = interp1d(frames, ys, kind="linear", fill_value="extrapolate")
+
+        start_frame = int(frames.min())
+        end_frame = int(frames.max())
+        all_frames = np.arange(start_frame, end_frame + 1)
+
+        interpolated_xs = f_x(all_frames)
+        interpolated_ys = f_y(all_frames)
+
+        filled_trajectory = {
+            int(frame): (float(cx), float(cy))
+            for frame, cx, cy in zip(all_frames, interpolated_xs, interpolated_ys)
+        }
+        interpolated_ball_history[track_id] = filled_trajectory
 
 
 

@@ -1,7 +1,7 @@
 from ultralytics import YOLO # Offical library that contains YOLO11 model
 import cv2 # Computer vision tool to load video files, draw boxes, save/display output frames
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from collections import defaultdict
 
@@ -14,7 +14,7 @@ def running_model():
         source=VIDEO_PATH,
         tracker="/Users/warm/Library/Mobile Documents/com~apple~CloudDocs/Desktop/ML Football/MVP/custom_bytetrack.yaml",
         classes=[0, 32], # specific sports ball & players class IDs
-        show=True, 
+        show=False, 
         save=True,
         persist=True, # Continous ID for each frame as much as it can
         stream=True, # Warning sign accepted for RAM usage
@@ -98,24 +98,25 @@ def running_model():
         }
         interpolated_ball_history[track_id] = filled_trajectory
 
+    return interpolated_ball_history, frame_count
+
+def get_ball_position(frame_num, ball_history_data):    
+    for track_id, trajectory in ball_history_data.items():        
+        if frame_num in trajectory:            
+            return trajectory[frame_num]    
+    return None
+
+interpolated_ball_history, frame_count = running_model()
 
 
-# print("------------------------------------------------------------------")
-# total_records = 0
-# broken_records = 0
+covered = 0
+missing = 0
+for f in range(1, frame_count+1):
+    position = get_ball_position(f, interpolated_ball_history)
+    if position is not None:
+        covered += 1
+    else:
+        missing += 1
 
-# for player_id, frames in track_history.items():
-#     for f in frames:
-#         total_records += 1
-#         if f["distance_to_ball"] == -1:
-#             broken_records += 1
-#             print(f"Validation Failure on Frame {f['frame']}: Failed to calculate distance to ball for Player {player_id}.")
-
-# print("------------------------------------------------------------------")
-# print(f"Total Player Tracking Instances: {total_records}")
-# print(f"Total Broken Distance Calculations: {broken_records}")
-# if total_records > 0:
-#     print(f"Error Rate: {(broken_records / total_records) * 100:.2f}%")
-# print("------------------------------------------------------------------")
-            
-running_model()
+print(f"frames with ball positions: {covered}")
+print(f"frames without ball positions: {missing}")

@@ -1,5 +1,5 @@
-from ultralytics import YOLO # Offical library that contains YOLO11 model
-import cv2 # Computer vision tool to load video files, draw boxes, save/display output frames
+from ultralytics import YOLO
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
@@ -105,7 +105,7 @@ def running_model():
         }
         interpolated_ball_history[track_id] = filled_trajectory
 
-    return interpolated_ball_history, frame_count
+    return interpolated_ball_history, player_history, frame_count
 
 def get_ball_position(frame_num, ball_history_data):    
     for track_id, trajectory in ball_history_data.items():        
@@ -113,8 +113,9 @@ def get_ball_position(frame_num, ball_history_data):
             return trajectory[frame_num]    
     return None
 
-interpolated_ball_history, frame_count = running_model()
+interpolated_ball_history, player_history, frame_count = running_model()
 
+# Checkpoint to see every frame with the ball is covered (interpolation success)
 covered = 0
 missing = 0
 for f in range(1, frame_count+1):
@@ -127,3 +128,34 @@ for f in range(1, frame_count+1):
 print(f"frames with ball positions: {covered}")
 print(f"frames without ball positions: {missing}")
 
+def get_player_to_ball_distances(player_history, interpolated_ball_history, frame_count):
+    player_to_ball_master_dict = defaultdict(list)
+    for player_id, player_detection in player_history.items():
+        for frame_num, x_player, y_player in player_detection:
+            ball_pos = get_ball_position(frame_num, interpolated_ball_history)
+            x_ball, y_ball = ball_pos
+            # Calculating the distance between player_pos and ball_pos in the same frame
+            player_to_ball_distance = math.sqrt((x_ball - x_player)**2 + (y_ball - y_player)**2)
+
+            player_to_ball_master_dict[player_id].append({
+                "frame": frame_num,
+                "player_coord": (x_player, y_player),
+                "ball_coord": (x_ball, y_ball),
+                "player_to_ball_distance": player_to_ball_distance
+            })
+    return player_to_ball_master_dict
+
+
+
+player_ball_distances = get_player_to_ball_distances(player_history, interpolated_ball_history, frame_count)
+
+# Validation check on calculated distances_to_ball for players
+print("\n" + "="*40)
+for player_id, detections in player_ball_distances.items():
+    avergae_distance = sum(d["player_to_ball_distance"] for d in detections) / len(detections)
+    closest = min(detections, key=lambda d: d["player_to_ball_distance"])
+    print(f"player {player_id}: {len(detections)} frames "
+          f"Average distance: {avergae_distance}px "
+          f"closest: {closest["player_to_ball_distance"]}px "
+          f"at frame {closest["frame"]}")
+print("\n" + "="*40)

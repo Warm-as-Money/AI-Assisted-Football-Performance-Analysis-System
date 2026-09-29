@@ -76,11 +76,18 @@ def running_model():
 
     # Pass 2
     # Linear interpolation of the ball data
+    all_ball_detecttions = []
     interpolated_ball_history = {}
+
     for track_id, trajectory in ball_history.items():
-        frames = np.array([pt[0] for pt in trajectory])
-        xs = np.array([pt[1] for pt in trajectory])
-        ys = np.array([pt[2] for pt in trajectory])
+        for frame, x, y, in trajectory:
+            all_ball_detecttions.append((frame, x, y))
+
+        all_ball_detecttions.sort(key=lambda pt: pt[0])
+
+        frames = np.array([pt[0] for pt in all_ball_detecttions])
+        xs = np.array([pt[1] for pt in all_ball_detecttions])
+        ys = np.array([pt[2] for pt in all_ball_detecttions])
 
         f_x = interp1d(frames, xs, kind="linear", fill_value="extrapolate")
         f_y = interp1d(frames, ys, kind="linear", fill_value="extrapolate")
@@ -108,7 +115,6 @@ def get_ball_position(frame_num, ball_history_data):
 
 interpolated_ball_history, frame_count = running_model()
 
-
 covered = 0
 missing = 0
 for f in range(1, frame_count+1):
@@ -120,3 +126,4 @@ for f in range(1, frame_count+1):
 
 print(f"frames with ball positions: {covered}")
 print(f"frames without ball positions: {missing}")
+

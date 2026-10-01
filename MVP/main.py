@@ -25,10 +25,8 @@ def running_model():
     # {track_id: [(frame1,x,y), (frame2,x, y), ...]}
     ball_history = defaultdict(list)
     player_history = defaultdict(list) 
+    all_frame_boxes = defaultdict(dict) #{frame_count: {track_id: (x, y, w, h)}}
     frame_count = 0
-
-    first_frame_img = None
-    first_frame_boxes = {} #{track_id: (x, y, w, h)}
 
     # Pass 1
     for result in results:
@@ -44,9 +42,8 @@ def running_model():
         for box, track_id, class_id in zip(boxes, track_ids, class_ids):
             x, y, w, h = box
 
-            if frame_count == 1 and class_id != 32:
-                first_frame_img = result.orig_img.copy()
-                first_frame_boxes[track_id] = (float(x), float(y), float(w), float(h))
+            if class_id != 32:
+                all_frame_boxes[frame_count][track_id] = (float(x), float(y), float(w), float(h))
 
             # Recording the centre coord of the object
             frame_centre_coord = (frame_count, float(x), float(y))
@@ -113,30 +110,53 @@ def running_model():
     }
     interpolated_ball_history = filled_trajectory
 
-    return interpolated_ball_history, player_history, frame_count, first_frame_img, first_frame_boxes
+    return interpolated_ball_history, player_history, frame_count, all_frame_boxes, VIDEO_PATH
 
 def get_ball_position(frame_num, ball_history_data):    
     return ball_history_data.get(frame_num, None)
 
-interpolated_ball_history, player_history, frame_count, first_frame_img, first_frame_boxes = running_model()
+interpolated_ball_history, player_history, frame_count, all_frame_boxes, VIDEO_PATH = running_model()
 
 # Player Identification
-def draw_first_frame_boxes(img, player_history, first_frame_boxes):
-    display_img = img.copy()
-    for track_id, (x, y, w, h) in first_frame_boxes.items():
-        x1 = int(x - w/2)
-        y1 = int(y - h/2)
-        x2 = int(x + w/2)
-        y2 = int(y + h/2)
-        cv2.rectangle(display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(display_img, f"ID {track_id}", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+def draw_player_frame_boxes(player_history, all_frame_boxes, VIDEO_PATH):
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    current_frame = 1
+    player_identified = False
 
-    return display_img 
+    while not player_identified:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame - 1)
+        ret, frame = cap.read()
+        if ret:
+            display_img = frame.copy()
+            for track_id, (x,y,w,h) in all_frame_boxes[current_frame].items():
+                x1 = int(x - w/2)
+                y1 = int(y - h/2)
+                x2 = int(x + w/2)
+                y2 = int(y + h/2)
+                cv2.rectangle(display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(display_img, f"ID {track_id}", (x1, y1 -10), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 255, 0), 2)
 
-display_img = draw_first_frame_boxes(first_frame_img, player_history, first_frame_boxes)
-cv2.imshow("Click on the player to recieve feedback", display_img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+            cv2.imshow("Navigate frames - A/D to move, SPACE to select, Q to quit", display_img)
+            key = cv2.waitKey(30) & 0xFF
+            if key == ord('d'):
+                current_frame = min(current_frame + 1, frame_count)
+            elif key == ord('a'):
+                current_frame = max(current_frame - 1, 1)
+            elif key == ord(' '):
+                player_identified = True
+            elif key == ord('q'):
+                cap.release()
+                cv2.destroyAllWindows()
+                return None
+        else:
+            print(f"ERROR: Frame {frame_count} cannot be identified \n") 
+
+    cap.release()
+    cv2.destroyAllWindows()
+    return current_frame
+
+selected_frame = draw_player_frame_boxes(player_history, all_frame_boxes, VIDEO_PATH)
+print(f"User selected frame: {selected_frame}")
 
 # Checkpoint to see every frame with the ball is covered (interpolation success)
 covered = 0

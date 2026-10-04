@@ -158,6 +158,49 @@ def draw_player_frame_boxes(player_history, all_frame_boxes, VIDEO_PATH):
 selected_frame = draw_player_frame_boxes(player_history, all_frame_boxes, VIDEO_PATH)
 print(f"User selected frame: {selected_frame}")
 
+def select_player_box(selected_frame, all_frame_boxes, VIDEO_PATH):
+    cap = cv2.VideoCapture(VIDEO_PATH)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, selected_frame - 1)
+    ret, frame = cap.read()
+    cap.release()
+
+    display_img = frame.copy()
+    for track_id, (x,y,w,h) in all_frame_boxes[selected_frame].items():
+        x1 = int(x - w/2)
+        y1 = int(y - h/2)
+        x2 = int(x + w/2)
+        y2 = int(y + h/2)
+        cv2.rectangle(display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(display_img, f"ID {track_id}", (x1, y1 -10), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 255, 0), 2)
+
+    select_id = [None]
+
+    def mouse_click(evemt, x, y, flags, param):
+        if evemt == cv2.EVENT_LBUTTONDOWN:
+            for track_id, (cx, cy, w, h) in all_frame_boxes[selected_frame].items():
+                x1 = int(cx - w/2)
+                y1 = int(cy - h/2)
+                x2 = int(cx + w/2)
+                y2 = int(cy + h/2)
+                if x1 < x < x2 and y1 < y < y2:
+                    select_id[0] = track_id
+                    print(f"Player {track_id} selected as main character")
+                    cv2.destroyAllWindows()
+
+    cv2.imshow("Click on yourself to receive feedback", display_img)
+    cv2.setMouseCallback("Click on yourself to receive feedback", mouse_click)
+    try:
+        while cv2.getWindowProperty("Click on yourself to receive feedback", cv2.WND_PROP_VISIBLE) >= 1:
+            cv2.waitKey(30)
+    except:
+        pass
+    cv2.destroyAllWindows()
+
+    return select_id[0]
+
+main_player_identified = select_player_box(selected_frame, all_frame_boxes, VIDEO_PATH)
+print(f"Main player seed ID: {main_player_identified}")
+
 # Checkpoint to see every frame with the ball is covered (interpolation success)
 covered = 0
 missing = 0

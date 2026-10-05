@@ -15,7 +15,7 @@ def running_model():
         source=VIDEO_PATH,
         tracker="/Users/warm/Library/Mobile Documents/com~apple~CloudDocs/Desktop/ML Football/MVP/custom_bytetrack.yaml",
         classes=[0, 32], # specific sports ball & players class IDs
-        show=False, 
+        show=True, 
         save=True,
         persist=True, # Continous ID for each frame as much as it can
         stream=True, # Warning sign accepted for RAM usage
@@ -246,3 +246,40 @@ for player_id, detections in player_ball_distances.items():
           f"closest: {closest["player_to_ball_distance"]}px "
           f"at frame {closest["frame"]}")
 print("\n" + "="*40)
+
+
+# Diagnostic profiler to verify limits
+def player_exploration(player_history, main_player_identified, selected_frame, player_ball_distances):
+    first_pos = player_history[main_player_identified][0]
+    last_pos = player_history[main_player_identified][-1]
+
+    print(f"ID {main_player_identified} last seen: frame {last_pos[0]} at ({last_pos[1]:.1f}, {last_pos[2]:.1f})\n")
+    print("All other IDs - first appearance:")
+    for pid, detections in player_history.items():
+        if pid == main_player_identified:
+            continue
+        first = detections[0]
+        print(f"ID {pid}: first appears frame {first[0]} at ({first[1]:.1f}, {first[2]:.1f})")
+            
+
+seed_terminal_profile = player_exploration(player_history, main_player_identified, selected_frame, player_ball_distances)
+
+
+print("Player candidates analysis after ID 1 disappears ( fro frame 92):")
+for player_id, detections in player_history.items():
+    if player_id == main_player_identified:
+        continue
+    first = detections[0]
+    if first[0] > 92:
+        # Get ball distances for first 10 frames of this ID
+        if player_id in player_ball_distances:
+            first_10 = player_ball_distances[player_id][:10]
+            avg_ball_dist = sum(d["player_to_ball_distance"] for d in first_10) / len(first_10)
+            delta_t = first[0] - 92
+            delta_d = math.sqrt((first[1] - 666.4)**2 +(first[2] - 862.6)**2)
+            print(f"ID {player_id}: Δt={delta_t} frames, "
+                  f"Δd={delta_d:.1f}px, "
+                  f"avg ball dist first 10 frames={avg_ball_dist:.1f}px")
+
+
+# The Spatiotemporal Stitching Engine

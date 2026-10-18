@@ -285,14 +285,16 @@ for player_id, detections in player_history.items():
 # The Spatiotemporal Stitching Engine
 def stitching_engine(main_player_identified, player_history, player_ball_distances):
     unified_identity = [main_player_identified]
+    current_id = main_player_identified
 
     while True:
-        current_last_frame, current_x, current_y = player_history[main_player_identified][-1]
+        current_last_frame, current_x, current_y = player_history[current_id][-1]
         candidates = []
         for candidate_id, history in player_history.items():
             if not history:
                 continue
             first_frame, first_x, first_y = history[0]
+
             # Condition: first appearance frame > current_id's last frame and not already in unified_identity
             if first_frame > current_last_frame and candidate_id not in unified_identity:
                 # Δt = candidate first frame - current last frame
@@ -300,16 +302,17 @@ def stitching_engine(main_player_identified, player_history, player_ball_distanc
                 # Δd = Euclidean distance between positions
                 dd = math.sqrt((first_x - current_x) ** 2 + (first_y - current_y) ** 2)
 
-                # From here, I need to filter to only keep candidates where Δt < 30 and Δd > 200
+                # From here, I need to filter to only keep candidates where Δt < 30 and Δd < 200
                 # Calculate avg_ball = average ball distance in first 10 frames
-                ball_records = player_ball_distances.get(candidate_id, [])[:10]
-                if ball_records:
-                    total_ball_dist = sum(record["player_to_ball_distance"] for record in ball_records)
-                    avg_ball = total_ball_dist / len(ball_records)
-                else:
-                    avg_ball = float('inf') # Safety net if data is missing
-                    
-                candidates.append((candidate_id, avg_ball))
+                if dt < 60 and dd < 300:
+                    ball_records = player_ball_distances.get(candidate_id, [])[:10]
+                    if ball_records:
+                        total_ball_dist = sum(record["player_to_ball_distance"] for record in ball_records)
+                        avg_ball = total_ball_dist / len(ball_records)
+                    else:
+                        avg_ball = float('inf') # Safety net if data is missing
+                        
+                    candidates.append((candidate_id, avg_ball))
                 
         # acndidates are found, then pick the one with the LOWEST avg_ball
         if candidates:
@@ -324,3 +327,19 @@ def stitching_engine(main_player_identified, player_history, player_ball_distanc
     return unified_identity
 unified_identity = stitching_engine(main_player_identified, player_history, player_ball_distances)
 print(f"Unified identity chain: {unified_identity}")
+
+def unifying(unified_identity, player_history):
+    unified_player_profile = []
+    
+    for player_id in unified_identity:
+        detections = player_history.get(player_id, [])
+        unified_player_profile.extend(detections)
+        
+    unified_player_profile.sort(key=lambda x: x[0])
+    
+    return unified_player_profile
+
+unified_player_profile = unifying(unified_identity, player_history)
+print(f"Total unified detections: {len(unified_player_profile)}")
+print(f"First detection: {unified_player_profile[0]}")
+print(f"Last detection: {unified_player_profile[-1]}")

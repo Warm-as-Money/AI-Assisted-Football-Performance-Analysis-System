@@ -236,52 +236,6 @@ def get_player_to_ball_distances(player_history, interpolated_ball_history, fram
 
 player_ball_distances = get_player_to_ball_distances(player_history, interpolated_ball_history, frame_count)
 
-# Validation check on calculated distances_to_ball for players
-print("\n" + "="*40)
-for player_id, detections in player_ball_distances.items():
-    avergae_distance = sum(d["player_to_ball_distance"] for d in detections) / len(detections)
-    closest = min(detections, key=lambda d: d["player_to_ball_distance"])
-    print(f"player {player_id}: {len(detections)} frames "
-          f"Average distance: {avergae_distance}px "
-          f"closest: {closest["player_to_ball_distance"]}px "
-          f"at frame {closest["frame"]}")
-print("\n" + "="*40)
-
-
-# Diagnostic profiler to verify limits
-def player_exploration(player_history, main_player_identified, selected_frame, player_ball_distances):
-    first_pos = player_history[main_player_identified][0]
-    last_pos = player_history[main_player_identified][-1]
-
-    print(f"ID {main_player_identified} last seen: frame {last_pos[0]} at ({last_pos[1]:.1f}, {last_pos[2]:.1f})\n")
-    print("All other IDs - first appearance:")
-    for pid, detections in player_history.items():
-        if pid == main_player_identified:
-            continue
-        first = detections[0]
-        print(f"ID {pid}: first appears frame {first[0]} at ({first[1]:.1f}, {first[2]:.1f})")
-            
-
-seed_terminal_profile = player_exploration(player_history, main_player_identified, selected_frame, player_ball_distances)
-
-
-print("Player candidates analysis after ID 1 disappears ( fro frame 92):")
-for player_id, detections in player_history.items():
-    if player_id == main_player_identified:
-        continue
-    first = detections[0]
-    if first[0] > 92:
-        # Get ball distances for first 10 frames of this ID
-        if player_id in player_ball_distances:
-            first_10 = player_ball_distances[player_id][:10]
-            avg_ball_dist = sum(d["player_to_ball_distance"] for d in first_10) / len(first_10)
-            delta_t = first[0] - 92
-            delta_d = math.sqrt((first[1] - 666.4)**2 +(first[2] - 862.6)**2)
-            print(f"ID {player_id}: Δt={delta_t} frames, "
-                  f"Δd={delta_d:.1f}px, "
-                  f"avg ball dist first 10 frames={avg_ball_dist:.1f}px")
-
-
 # The Spatiotemporal Stitching Engine
 def stitching_engine(main_player_identified, player_history, player_ball_distances):
     unified_identity = [main_player_identified]
@@ -331,15 +285,21 @@ print(f"Unified identity chain: {unified_identity}")
 def unifying(unified_identity, player_history):
     unified_player_profile = []
     
-    for player_id in unified_identity:
-        detections = player_history.get(player_id, [])
+    for fragment_id in unified_identity:
+        detections = player_ball_distances.get(fragment_id, [])
         unified_player_profile.extend(detections)
         
-    unified_player_profile.sort(key=lambda x: x[0])
+    unified_player_profile.sort(key=lambda x: x["frame"])
     
     return unified_player_profile
 
-unified_player_profile = unifying(unified_identity, player_history)
+unified_player_profile = unifying(unified_identity, player_ball_distances)
 print(f"Total unified detections: {len(unified_player_profile)}")
 print(f"First detection: {unified_player_profile[0]}")
 print(f"Last detection: {unified_player_profile[-1]}")
+
+
+attacking_direction = input("Which direction is your team attacking? (left/right): ").strip().lower()
+playing_position = input("What position are you playing? (attacker/midfielder/defender): ").strip().lower()
+
+

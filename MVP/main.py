@@ -82,35 +82,49 @@ def running_model():
     # Pass 2
     # Linear interpolation of the ball data
     all_ball_detecttions = []
-    interpolated_ball_history = {}
-
     for track_id, trajectory in ball_history.items():
         for frame, x, y, in trajectory:
             all_ball_detecttions.append((frame, x, y))
 
+    # Sort chronological order
     all_ball_detecttions.sort(key=lambda pt: pt[0])
 
-    frames = np.array([pt[0] for pt in all_ball_detecttions])
-    xs = np.array([pt[1] for pt in all_ball_detecttions])
-    ys = np.array([pt[2] for pt in all_ball_detecttions])
+    interpolated_ball_history = {}
 
-    f_x = interp1d(frames, xs, kind="linear", fill_value="extrapolate")
-    f_y = interp1d(frames, ys, kind="linear", fill_value="extrapolate")
+    if len(all_ball_detecttions) > 0:
+        #starting and ending boundaries
+        start_frame = int(all_ball_detecttions[0][0])
+        end_frame = int(all_ball_detecttions[-1][0])
+        
+        ball_lookup = {int(pt[0]): (float(pt[1]), float(pt[2])) for pt in all_ball_detecttions}
+        
+        for f in range(start_frame, end_frame + 1):
+            if f in ball_lookup:
+                # If the ball is present
+                interpolated_ball_history[f] = ball_lookup[f]
+            else:
+                # If the ball is missing, find the nearest previous frame with data
+                prev_f = f - 1
+                while prev_f not in ball_lookup and prev_f >= start_frame:
+                    prev_f -= 1
 
-    start_frame = int(frames.min())
-    end_frame = int(frames.max())
-    all_frames = np.arange(start_frame, end_frame + 1)
+                #upcoming frame with data 
+                next_f = f + 1
+                while next_f not in ball_lookup and next_f <= end_frame:
+                    next_f += 1
+                    
+                # rise over run
+                if prev_f in ball_lookup and next_f in ball_lookup:
+                    x1, y1 = ball_lookup[prev_f]
+                    x2, y2 = ball_lookup[next_f]
+                    
+                    gap_percentage = (f - prev_f) / (next_f - prev_f)
+                    new_x = x1 + gap_percentage * (x2 - x1)
+                    new_y = y1 + gap_percentage * (y2 - y1)
+                    
+                    interpolated_ball_history[f] = (new_x, new_y)
 
-    interpolated_xs = f_x(all_frames)
-    interpolated_ys = f_y(all_frames)
-
-    filled_trajectory = {
-        int(frame): (float(cx), float(cy))
-        for frame, cx, cy in zip(all_frames, interpolated_xs, interpolated_ys)
-    }
-    interpolated_ball_history = filled_trajectory
-
-    return interpolated_ball_history, player_history, frame_count, all_frame_boxes, VIDEO_PATH
+        return interpolated_ball_history, player_history, frame_count, all_frame_boxes, VIDEO_PATH
 
 def get_ball_position(frame_num, ball_history_data):    
     return ball_history_data.get(frame_num, None)
@@ -173,30 +187,47 @@ def select_player_box(selected_frame, all_frame_boxes, VIDEO_PATH):
         cv2.rectangle(display_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(display_img, f"ID {track_id}", (x1, y1 -10), cv2.FONT_HERSHEY_COMPLEX, 0.6, (0, 255, 0), 2)
 
-    select_id = [None]
 
-    def mouse_click(evemt, x, y, flags, param):
-        if evemt == cv2.EVENT_LBUTTONDOWN:
+    global mouse_x, mouse_y, click_triggered
+    mouse_x = -1
+    mouse_y = -1
+    click_triggered = False
+
+    def mouse_click(event, x, y, flags, param):
+        global mouse_x, mouse_y, click_triggered
+        if event == cv2.EVENT_LBUTTONDOWN:
+            mouse_x = x
+            mouse_y = y
+            click_triggered = True
+
+    cv2.imshow("Click on yourself to receive feedback", display_img)
+    cv2.setMouseCallback("Click on yourself to receive feedback", mouse_click)
+
+    selected_player_id = None
+    while True:
+        cv2.imshow("Click on yourself to receive feedback", display_img)
+        key = cv2.waitKey(30) & 0xFF
+        
+        if click_triggered:
             for track_id, (cx, cy, w, h) in all_frame_boxes[selected_frame].items():
                 x1 = int(cx - w/2)
                 y1 = int(cy - h/2)
                 x2 = int(cx + w/2)
                 y2 = int(cy + h/2)
-                if x1 < x < x2 and y1 < y < y2:
-                    select_id[0] = track_id
-                    print(f"Player {track_id} selected as main character")
-                    cv2.destroyAllWindows()
+            
+                if mouse_x >= x1 and mouse_x <= x2:
+                    if mouse_y >= y1 and mouse_y <= y2:
+                        selected_player_id = track_id
+                        print(f"Player {track_id} selected as main character")
+                        break
+            
+            if selected_player_id is not None:
+                break
+            click_triggered = False
 
-    cv2.imshow("Click on yourself to receive feedback", display_img)
-    cv2.setMouseCallback("Click on yourself to receive feedback", mouse_click)
-    try:
-        while cv2.getWindowProperty("Click on yourself to receive feedback", cv2.WND_PROP_VISIBLE) >= 1:
-            cv2.waitKey(30)
-    except:
-        pass
     cv2.destroyAllWindows()
+    return selected_player_id
 
-    return select_id[0]
 
 main_player_identified = select_player_box(selected_frame, all_frame_boxes, VIDEO_PATH)
 print(f"Main player seed ID: {main_player_identified}")

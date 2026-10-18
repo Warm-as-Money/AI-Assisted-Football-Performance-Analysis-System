@@ -283,3 +283,44 @@ for player_id, detections in player_history.items():
 
 
 # The Spatiotemporal Stitching Engine
+def stitching_engine(main_player_identified, player_history, player_ball_distances):
+    unified_identity = [main_player_identified]
+
+    while True:
+        current_last_frame, current_x, current_y = player_history[main_player_identified][-1]
+        candidates = []
+        for candidate_id, history in player_history.items():
+            if not history:
+                continue
+            first_frame, first_x, first_y = history[0]
+            # Condition: first appearance frame > current_id's last frame and not already in unified_identity
+            if first_frame > current_last_frame and candidate_id not in unified_identity:
+                # Δt = candidate first frame - current last frame
+                dt = first_frame - current_last_frame
+                # Δd = Euclidean distance between positions
+                dd = math.sqrt((first_x - current_x) ** 2 + (first_y - current_y) ** 2)
+
+                # From here, I need to filter to only keep candidates where Δt < 30 and Δd > 200
+                # Calculate avg_ball = average ball distance in first 10 frames
+                ball_records = player_ball_distances.get(candidate_id, [])[:10]
+                if ball_records:
+                    total_ball_dist = sum(record["player_to_ball_distance"] for record in ball_records)
+                    avg_ball = total_ball_dist / len(ball_records)
+                else:
+                    avg_ball = float('inf') # Safety net if data is missing
+                    
+                candidates.append((candidate_id, avg_ball))
+                
+        # acndidates are found, then pick the one with the LOWEST avg_ball
+        if candidates:
+            #avg_ball ascending
+            candidates.sort(key=lambda x: x[1])
+            best_candidate_id, _ = candidates[0]
+            
+            unified_identity.append(best_candidate_id)
+            current_id = best_candidate_id
+        else:
+            break
+    return unified_identity
+unified_identity = stitching_engine(main_player_identified, player_history, player_ball_distances)
+print(f"Unified identity chain: {unified_identity}")

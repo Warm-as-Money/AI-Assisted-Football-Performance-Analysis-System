@@ -333,4 +333,71 @@ print(f"Last detection: {unified_player_profile[-1]}")
 attacking_direction = input("Which direction is your team attacking? (left/right): ").strip().lower()
 playing_position = input("What position are you playing? (attacker/midfielder/defender): ").strip().lower()
 
+def event_detection(unified_player_profile, attacking_direction):
+    # ----Closest Ball Movement ----
+    closest_moment = min(unified_player_profile, key=lambda x: x["player_to_ball_distance"])
+    closest_frame = closest_moment["frame"]
+    closest_distance = closest_moment["player_to_ball_distance"]
 
+    # ---- Peak Forward Position ----
+    if attacking_direction == "right":
+        peak_moment = max(unified_player_profile, key=lambda x: x["player_coord"][0])
+    else:
+        peak_moment = min(unified_player_profile, key=lambda x: x["player_coord"][0])
+    peak_frame = peak_moment["frame"]
+    peak_x_position = peak_moment["player_coord"][0]
+
+    # ----- Total Distance Covered -----
+    total_distance = 0.0
+    for i in range(len(unified_player_profile) - 1):
+        p1 = unified_player_profile[i]["player_coord"]
+        p2 = unified_player_profile[i + 1]["player_coord"]
+        
+        # sqrt((x2 - x1)^2 + (y2 - y1)^2)
+        distance = math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+        total_distance += distance
+
+    # ----- Involvement Rate -----
+    involved_count = 0
+    for frame in unified_player_profile:
+        if frame["player_to_ball_distance"] < 250:
+            involved_count += 1
+
+    # final percentages
+    total_frames = len(unified_player_profile)
+    if total_frames > 0:
+        involvement_rate = (involved_count / total_frames) * 100
+    else:
+        involvement_rate = 0.0
+
+    return {
+        "closest_frame": closest_frame,
+        "closest_distance": closest_distance,
+        "peak_frame": peak_frame,
+        "peak_x_position": peak_x_position,
+        "total_distance": total_distance,
+        "involvement_rate": involvement_rate
+    }
+
+
+events = event_detection(unified_player_profile, attacking_direction)
+
+print(f"\n--- EVENT DETECTION ---")
+print(f"Closest ball moment: frame {events['closest_frame']} at {events['closest_distance']:.1f}px")
+print(f"Peak forward position: frame {events['peak_frame']} at x={events['peak_x_position']:.1f}px")
+print(f"Total distance covered: {events['total_distance']:.1f}px")
+print(f"Involvement rate: {events['involvement_rate']:.1f}%")
+
+
+ranges = {"0-150": 0, "150-250": 0, "250-400": 0, "400+": 0}
+for d in unified_player_profile:
+    dist = d["player_to_ball_distance"]
+    if dist < 150:
+        ranges["0-150"] += 1
+    elif dist < 250:
+        ranges["150-250"] += 1
+    elif dist < 400:
+        ranges["250-400"] += 1
+    else:
+        ranges["400+"] += 1
+print(ranges)
